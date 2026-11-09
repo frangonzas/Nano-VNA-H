@@ -4,6 +4,16 @@
 
 ![Pantalla de versión en el dispositivo real](docs/pantalla-version-es-v2.png)
 
+## Capturas reales de los menús en español
+
+Las siguientes imágenes se han obtenido directamente del NanoVNA-H por USB con la edición española instalada.
+
+| Menú principal | Menú de ajustes |
+|---|---|
+| ![Menú principal en español](docs/pantalla-menu-principal-es.png) | ![Menú AJUSTES en español](docs/pantalla-menu-ajustes-es.png) |
+
+La pantalla de versión personalizada se muestra al comienzo de este documento.
+
 ## Características
 
 - Traducción al español de los menús, opciones principales, teclado numérico y estados de la interfaz.
