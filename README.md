@@ -27,19 +27,20 @@
 - `firmware/NanoVNA-H-MS_1.2.27_ES-v2.bin` — binario de firmware probado.
 - `firmware/NanoVNA-H-MS_1.2.27_ES-v2.hex` — formato Intel HEX.
 - `firmware/SHA256SUMS.txt` — comprobación de integridad.
-- `ui.c` — contiene la traducción y la pantalla de créditos.
+- `traduccion_es_v2.patch` — cambios completos de `ui.c`: traducción y pantalla de créditos.
 - `docs/pantalla-version-es-v2.png` — captura real por USB.
 
 ## Compilación
 
-Necesitas `arm-none-eabi-gcc` (probado con **xPack 12.3.1**), `make` y las herramientas del entorno. Esta revisión original distribuye `ChibiOS.7z`; **extrae ese archivo en la carpeta `ChibiOS/`** antes de compilar, ya que contiene modificaciones requeridas.
+Necesitas `git`, `bsdtar`, `make` y `arm-none-eabi-gcc` (probado con **xPack 12.3.1**).
+
+Este repositorio incluye el parche `traduccion_es_v2.patch`. El script recupera el **código fuente original exacto**, aplica la traducción y personalización de `ui.c`, extrae la biblioteca modificada `ChibiOS.7z` y construye el firmware:
 
 ```bash
-bsdtar -xf ChibiOS.7z
-make -j4 TARGET=F072
+sh reconstruir_y_compilar.sh
 ```
 
-La salida se genera en `build/H.bin`, `build/H.hex` y `build/H.elf`. El binario ES v2 ocupa **90.920 bytes**, por lo que no cabe en una Flash de 64 KiB.
+Los archivos resultantes se generan en `NanoVNA-H-original/build/H.bin`, `H.hex` y `H.elf`. La ejecución del script requiere conexión a internet para clonar el proyecto original. El binario ES v2 ocupa **90.920 bytes**, por lo que no cabe en una Flash de 64 KiB.
 
 ## Precauciones de actualización
 

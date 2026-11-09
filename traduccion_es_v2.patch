@@ -1,0 +1,904 @@
+diff --git a/ui.c b/ui.c
+index 031e1f8..94566ce 100644
+--- a/ui.c
++++ b/ui.c
+@@ -506,7 +506,7 @@ static void getTouchPoint(uint16_t x, uint16_t y, const char *name, int16_t *dat
+   lcd_set_colors(LCD_FG_COLOR, LCD_BG_COLOR);
+   lcd_clear_screen();
+   lcd_blitBitmap(x, y, TOUCH_MARK_W, TOUCH_MARK_H, touch_bitmap);
+-  lcd_printf((LCD_WIDTH-18*FONT_WIDTH)/2, (LCD_HEIGHT-FONT_GET_HEIGHT)/2, "TOUCH %s *", name);
++  lcd_printf((LCD_WIDTH-18*FONT_WIDTH)/2, (LCD_HEIGHT-FONT_GET_HEIGHT)/2, "TOQUE %s *", name);
+   // Wait release, and fill data
+   touch_wait_release();
+   data[0] = last_touch_x;
+@@ -580,24 +580,37 @@ touch_position(int *x, int *y)
+ static void
+ show_version(void)
+ {
+-  int x = 5, y = 5, i = 1;
+-  int str_height = FONT_STR_HEIGHT + 2;
++  // Pantalla de creditos de la adaptacion al espanol.
++  // El firmware y la interfaz de medidas permanecen intactos.
++  // Coordenadas pensadas para LCD 320x240, con fuente ASCII incluida.
++  const int x = 5;
++  const int y_hora = 207;
++  const int y_bateria = 221;
+   lcd_set_colors(LCD_FG_COLOR, LCD_BG_COLOR);
+-
+   lcd_clear_screen();
+-  uint16_t shift = 0b00010010000;
++
++  // Nombre del analizador y edicion espanola.
+   lcd_set_colors(LCD_TRACE_2_COLOR, LCD_BG_COLOR);
+-  lcd_drawstring_size(BOARD_NAME, x , y, 3);
+-  y+=FONT_GET_HEIGHT*3+3-5;
++  lcd_drawstring_size(BOARD_NAME, x, 5, 3);
++  lcd_drawstring(x, 44, "EDICION EN ESPANOL");
++
++  // Version original: se conserva para evitar ambiguedad tecnica.
+   lcd_set_colors(LCD_FG_COLOR, LCD_BG_COLOR);
+-  while (info_about[i]) {
+-    do {shift>>=1; y+=5;} while (shift&1);
+-    lcd_drawstring(x, y+=str_height-5, info_about[i++]);
+-  }
+-  lcd_printf(x, y+= str_height, "TCXO = %q" S_Hz, config._xtal_freq);
++  lcd_printf(x, 60, "Version: " VERSION " / ES v2");
++  lcd_drawstring(x, 76, "Adaptacion y traduccion:");
++  lcd_set_colors(LCD_TRACE_2_COLOR, LCD_BG_COLOR);
++  lcd_drawstring_size("Fran Gonzas", x, 90, 2);
+ 
+-  y+=str_height*2;
+-  // Update battery and time
++  // Reconocimiento de autores y licencia del firmware de origen.
++  lcd_set_colors(LCD_FG_COLOR, LCD_BG_COLOR);
++  lcd_drawstring(x, 118, "Original: NanoVNA.com");
++  lcd_drawstring(x, 132, "(c) 2019-2024 NanoVNA.com");
++  lcd_drawstring(x, 146, "Basado en DiSlord y edy555");
++  lcd_drawstring(x, 160, "Licencia GPLv3 o posterior");
++  lcd_printf(x, 174, "TCXO: %q" S_Hz, config._xtal_freq);
++  lcd_drawstring(x, 188, "Compilado: " __DATE__);
++
++  // Informacion viva: mantener hora y bateria como en el original.
+   uint16_t cnt = 0;
+   while (true) {
+     if (touch_check() == EVT_TOUCH_PRESSED)
+@@ -605,24 +618,21 @@ show_version(void)
+     if (btn_check() & EVT_BUTTON_SINGLE_CLICK)
+       break;
+     chThdSleepMilliseconds(40);
+-    if ((cnt++)&0x07) continue; // Not update time so fast
++    if ((cnt++) & 0x07) continue;
+ 
+ #ifdef __USE_RTC__
+-    uint32_t tr = rtc_get_tr_bin(); // TR read first
+-    uint32_t dr = rtc_get_dr_bin(); // DR read second
+-    lcd_printf(x, y, "Time: 20%02d/%02d/%02d %02d:%02d:%02d" " (LS%c)",
++    uint32_t tr = rtc_get_tr_bin();
++    uint32_t dr = rtc_get_dr_bin();
++    lcd_printf(x, y_hora, "Fecha: 20%02d/%02d/%02d %02d:%02d:%02d",
+       RTC_DR_YEAR(dr),
+       RTC_DR_MONTH(dr),
+       RTC_DR_DAY(dr),
+-      RTC_TR_HOUR(dr),
+-      RTC_TR_MIN(dr),
+-      RTC_TR_SEC(dr),
+-      (RCC->BDCR & STM32_RTCSEL_MASK) == STM32_RTCSEL_LSE ? 'E' : 'I');
+-#endif
+-#if 1
+-    uint32_t vbat=adc_vbat_read();
+-    lcd_printf(x, y + str_height, "Batt: %d.%03d" S_VOLT, vbat/1000, vbat%1000);
++      RTC_TR_HOUR(tr),
++      RTC_TR_MIN(tr),
++      RTC_TR_SEC(tr));
+ #endif
++    uint32_t vbat = adc_vbat_read();
++    lcd_printf(x, y_bateria, "Bateria: %d.%03d" S_VOLT, vbat/1000, vbat%1000);
+   }
+ }
+ 
+@@ -635,8 +645,8 @@ enter_dfu(void)
+   lcd_set_colors(LCD_FG_COLOR, LCD_BG_COLOR);
+   // leave a last message 
+   lcd_clear_screen();
+-  lcd_drawstring(x, y, "DFU: Device Firmware Update Mode\n"
+-                       "To exit DFU mode, please reset device yourself.");
++  lcd_drawstring(x, y, "DFU: actualizacion de firmware\n"
++                       "Para salir, reinicie el equipo.");
+   boardDFUEnter();
+ }
+ #endif
+@@ -859,7 +869,7 @@ static UI_FUNCTION_ADV_CALLBACK(menu_channel_acb)
+   if (current_trace == TRACE_INVALID) {if (b) b->p1.text = ""; return;}
+   int ch = trace[current_trace].channel;
+   if (b){
+-    b->p1.text = ch == 0 ? "S11 (REFL)" : "S21 (THRU)";
++    b->p1.text = ch == 0 ? "S11 (REFL)" : "S21 (PASO)";
+     return;
+   }
+   set_trace_channel(current_trace, ch^1);
+@@ -869,9 +879,9 @@ static UI_FUNCTION_ADV_CALLBACK(menu_transform_window_acb)
+ {
+   char *text = "";
+   switch(props_mode & TD_WINDOW){
+-    case TD_WINDOW_MINIMUM: text = "MINIMUM"; data = TD_WINDOW_NORMAL;  break;
++    case TD_WINDOW_MINIMUM: text = "MINIMO"; data = TD_WINDOW_NORMAL;  break;
+     case TD_WINDOW_NORMAL:  text = "NORMAL";  data = TD_WINDOW_MAXIMUM; break;
+-    case TD_WINDOW_MAXIMUM: text = "MAXIMUM"; data = TD_WINDOW_MINIMUM; break;
++    case TD_WINDOW_MAXIMUM: text = "MAXIMO"; data = TD_WINDOW_MINIMUM; break;
+   }
+   if(b){
+     b->p1.text = text;
+@@ -885,7 +895,7 @@ static UI_FUNCTION_ADV_CALLBACK(menu_transform_acb)
+   (void)data;
+   if(b){
+     if (props_mode & DOMAIN_TIME) b->icon = BUTTON_ICON_CHECK;
+-    b->p1.text = (props_mode&DOMAIN_TIME) ? "ON" : "OFF";
++    b->p1.text = (props_mode&DOMAIN_TIME) ? "SI" : "NO";
+     return;
+   }
+   props_mode ^= DOMAIN_TIME;
+@@ -934,12 +944,12 @@ const vna_mode_data_t vna_mode_data[] = {
+ //                        text (if 0 use checkbox) Redraw flags on change
+   [VNA_MODE_AUTO_NAME]   = {0,                     REDRAW_BACKUP},
+ #ifdef __USE_SMOOTH__
+-  [VNA_MODE_SMOOTH]      = {"Geom\0Arith",         REDRAW_BACKUP},
++  [VNA_MODE_SMOOTH]      = {"GEOM.\0ARITM.",         REDRAW_BACKUP},
+ #endif
+ #ifdef __USE_SERIAL_CONSOLE__
+   [VNA_MODE_CONNECTION]  = {"USB\0SERIAL",         REDRAW_BACKUP},
+ #endif
+-  [VNA_MODE_SEARCH]      = {"MAXIMUM\0MINIMUM",    REDRAW_BACKUP},
++  [VNA_MODE_SEARCH]      = {"MAXIMO\0MINIMO",    REDRAW_BACKUP},
+   [VNA_MODE_SHOW_GRID]   = {0,                     REDRAW_BACKUP | REDRAW_AREA},
+   [VNA_MODE_DOT_GRID]    = {0,                     REDRAW_BACKUP | REDRAW_AREA},
+ #ifdef __USE_BACKUP__
+@@ -949,7 +959,7 @@ const vna_mode_data_t vna_mode_data[] = {
+   [VNA_MODE_FLIP_DISPLAY]= {0,                     REDRAW_BACKUP | REDRAW_CLRSCR | REDRAW_AREA | REDRAW_BATTERY | REDRAW_CAL_STATUS | REDRAW_FREQUENCY},
+ #endif
+ #ifdef __DIGIT_SEPARATOR__
+-  [VNA_MODE_SEPARATOR]   = {"DOT '.'\0COMMA ','",  REDRAW_BACKUP | REDRAW_MARKER | REDRAW_FREQUENCY},
++  [VNA_MODE_SEPARATOR]   = {"PUNTO '.'\0COMA ','",  REDRAW_BACKUP | REDRAW_MARKER | REDRAW_FREQUENCY},
+ #endif
+ #ifdef __SD_CARD_DUMP_TIFF__
+   [VNA_MODE_TIFF]        = {"BMP\0TIFF",           REDRAW_BACKUP},
+@@ -1084,7 +1094,7 @@ static UI_FUNCTION_ADV_CALLBACK(menu_pause_acb)
+ {
+   (void)data;
+   if (b){
+-    b->p1.text = (sweep_mode & SWEEP_ENABLE) ? "PAUSE" : "RESUME";
++    b->p1.text = (sweep_mode & SWEEP_ENABLE) ? "PAUSAR" : "SEGUIR";
+     b->icon = (sweep_mode & SWEEP_ENABLE) ? BUTTON_ICON_NOCHECK : BUTTON_ICON_CHECK;
+     return;
+   }
+@@ -1676,7 +1686,7 @@ static void vna_save_file(char *name, uint8_t format)
+ //    shell_printf("Total time: %dms (write %d byte/sec)\r\n", time/10, total_size*10000/time);
+   }
+ 
+-  drawMessageBox("SD CARD SAVE", res == FR_OK ? fs_filename : "  Fail write  ", 2000);
++  drawMessageBox("GUARDADO SD", res == FR_OK ? fs_filename : "Error escritura", 2000);
+   request_to_redraw(REDRAW_AREA|REDRAW_FREQUENCY);
+   ui_mode_normal();
+ }
+@@ -1732,89 +1742,89 @@ static UI_FUNCTION_CALLBACK(menu_back_cb)
+ 
+ // Back button submenu list
+ static const menuitem_t menu_back[] = {
+-  { MT_CALLBACK,   0, S_LARROW " BACK", menu_back_cb },
++  { MT_CALLBACK,   0, S_LARROW " VOLVER", menu_back_cb },
+   { MT_NEXT,       0, NULL,             NULL } // sentinel
+ };
+ 
+ #ifdef __USE_SD_CARD__
+ #ifdef __SD_FILE_BROWSER__
+ static const menuitem_t menu_sdcard_browse[] = {
+-  { MT_CALLBACK, FMT_BMP_FILE, "LOAD\nSCREENSHOT", menu_sdcard_browse_cb },
+-  { MT_CALLBACK, FMT_S1P_FILE, "LOAD S1P", menu_sdcard_browse_cb },
+-  { MT_CALLBACK, FMT_S2P_FILE, "LOAD S2P", menu_sdcard_browse_cb },
+-  { MT_CALLBACK, FMT_CAL_FILE, "LOAD CAL", menu_sdcard_browse_cb },
++  { MT_CALLBACK, FMT_BMP_FILE, "CARGAR\nCAPTURA", menu_sdcard_browse_cb },
++  { MT_CALLBACK, FMT_S1P_FILE, "CARGAR S1P", menu_sdcard_browse_cb },
++  { MT_CALLBACK, FMT_S2P_FILE, "CARGAR S2P", menu_sdcard_browse_cb },
++  { MT_CALLBACK, FMT_CAL_FILE, "CARGAR CAL", menu_sdcard_browse_cb },
+   { MT_NEXT,     0, NULL, menu_back } // next-> menu_back
+ };
+ #endif
+ 
+ static const menuitem_t menu_sdcard[] = {
+ #ifdef __SD_FILE_BROWSER__
+-  { MT_SUBMENU,              0, "LOAD",       menu_sdcard_browse },
++  { MT_SUBMENU,              0, "CARGAR",       menu_sdcard_browse },
+ #endif
+-  { MT_CALLBACK, FMT_S1P_FILE, "SAVE S1P",   menu_sdcard_cb },
+-  { MT_CALLBACK, FMT_S2P_FILE, "SAVE S2P",   menu_sdcard_cb },
+-  { MT_CALLBACK, FMT_BMP_FILE, "SCREENSHOT", menu_sdcard_cb },
+-  { MT_CALLBACK, FMT_CAL_FILE, "SAVE\nCALIBRATION", menu_sdcard_cb },
+-  { MT_ADV_CALLBACK, VNA_MODE_AUTO_NAME, "AUTO NAME", menu_vna_mode_acb},
++  { MT_CALLBACK, FMT_S1P_FILE, "GUARDAR S1P",   menu_sdcard_cb },
++  { MT_CALLBACK, FMT_S2P_FILE, "GUARDAR S2P",   menu_sdcard_cb },
++  { MT_CALLBACK, FMT_BMP_FILE, "CAPTURA", menu_sdcard_cb },
++  { MT_CALLBACK, FMT_CAL_FILE, "GUARDAR\nCALIBRACION", menu_sdcard_cb },
++  { MT_ADV_CALLBACK, VNA_MODE_AUTO_NAME, "NOMBRE AUTO", menu_vna_mode_acb},
+ #ifdef __SD_CARD_DUMP_TIFF__
+-  { MT_ADV_CALLBACK, VNA_MODE_TIFF, "IMAGE FORMAT\n " R_LINK_COLOR "%s", menu_vna_mode_acb },
++  { MT_ADV_CALLBACK, VNA_MODE_TIFF, "FORMATO IMG.\n " R_LINK_COLOR "%s", menu_vna_mode_acb },
+ #endif
+   { MT_NEXT,     0, NULL, menu_back } // next-> menu_back
+ };
+ #endif
+ 
+ static const menuitem_t menu_calop[] = {
+-  { MT_ADV_CALLBACK, CAL_OPEN,  "OPEN",  menu_calop_acb },
+-  { MT_ADV_CALLBACK, CAL_SHORT, "SHORT", menu_calop_acb },
+-  { MT_ADV_CALLBACK, CAL_LOAD,  "LOAD",  menu_calop_acb },
+-  { MT_ADV_CALLBACK, CAL_ISOLN, "ISOLN", menu_calop_acb },
+-  { MT_ADV_CALLBACK, CAL_THRU,  "THRU",  menu_calop_acb },
+-  { MT_CALLBACK, 0,             "DONE",  menu_caldone_cb },
+-  { MT_CALLBACK, 1,             "DONE IN RAM",  menu_caldone_cb },
+-  { MT_ADV_CALLBACK, KM_EDELAY, "E-DELAY\n " R_LINK_COLOR "%b.7F" S_SECOND, menu_keyboard_acb },
++  { MT_ADV_CALLBACK, CAL_OPEN,  "ABIERTO",  menu_calop_acb },
++  { MT_ADV_CALLBACK, CAL_SHORT, "CORTO", menu_calop_acb },
++  { MT_ADV_CALLBACK, CAL_LOAD,  "CARGA 50",  menu_calop_acb },
++  { MT_ADV_CALLBACK, CAL_ISOLN, "AISLAM.", menu_calop_acb },
++  { MT_ADV_CALLBACK, CAL_THRU,  "PASO",  menu_calop_acb },
++  { MT_CALLBACK, 0,             "TERMINAR",  menu_caldone_cb },
++  { MT_CALLBACK, 1,             "SOLO EN RAM",  menu_caldone_cb },
++  { MT_ADV_CALLBACK, KM_EDELAY, "RETARDO E.\n " R_LINK_COLOR "%b.7F" S_SECOND, menu_keyboard_acb },
+   { MT_NEXT,     0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_save[] = {
+-  { MT_ADV_CALLBACK, 0, "Empty %d", menu_save_acb },//87632
+-  { MT_ADV_CALLBACK, 1, "Empty %d", menu_save_acb },
+-  { MT_ADV_CALLBACK, 2, "Empty %d", menu_save_acb },
++  { MT_ADV_CALLBACK, 0, "LIBRE %d", menu_save_acb },//87632
++  { MT_ADV_CALLBACK, 1, "LIBRE %d", menu_save_acb },
++  { MT_ADV_CALLBACK, 2, "LIBRE %d", menu_save_acb },
+ #if SAVEAREA_MAX > 3
+-  { MT_ADV_CALLBACK, 3, "Empty %d", menu_save_acb },
++  { MT_ADV_CALLBACK, 3, "LIBRE %d", menu_save_acb },
+ #endif
+ #if SAVEAREA_MAX > 4
+-  { MT_ADV_CALLBACK, 4, "Empty %d", menu_save_acb },
++  { MT_ADV_CALLBACK, 4, "LIBRE %d", menu_save_acb },
+ #endif
+ #if SAVEAREA_MAX > 5
+-  { MT_ADV_CALLBACK, 5, "Empty %d", menu_save_acb },
++  { MT_ADV_CALLBACK, 5, "LIBRE %d", menu_save_acb },
+ #endif
+ #if SAVEAREA_MAX > 6
+-  { MT_ADV_CALLBACK, 6, "Empty %d", menu_save_acb },
++  { MT_ADV_CALLBACK, 6, "LIBRE %d", menu_save_acb },
+ #endif
+ #ifdef __SD_FILE_BROWSER__
+-  { MT_CALLBACK, FMT_CAL_FILE, "SAVE TO\n SD CARD", menu_sdcard_cb },
++  { MT_CALLBACK, FMT_CAL_FILE, "GUARDAR EN\n TARJETA SD", menu_sdcard_cb },
+ #endif
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_recall[] = {
+-  { MT_ADV_CALLBACK, 0, "Empty %d", menu_recall_acb },
+-  { MT_ADV_CALLBACK, 1, "Empty %d", menu_recall_acb },
+-  { MT_ADV_CALLBACK, 2, "Empty %d", menu_recall_acb },
++  { MT_ADV_CALLBACK, 0, "LIBRE %d", menu_recall_acb },
++  { MT_ADV_CALLBACK, 1, "LIBRE %d", menu_recall_acb },
++  { MT_ADV_CALLBACK, 2, "LIBRE %d", menu_recall_acb },
+ #if SAVEAREA_MAX > 3
+-  { MT_ADV_CALLBACK, 3, "Empty %d", menu_recall_acb },
++  { MT_ADV_CALLBACK, 3, "LIBRE %d", menu_recall_acb },
+ #endif
+ #if SAVEAREA_MAX > 4
+-  { MT_ADV_CALLBACK, 4, "Empty %d", menu_recall_acb },
++  { MT_ADV_CALLBACK, 4, "LIBRE %d", menu_recall_acb },
+ #endif
+ #if SAVEAREA_MAX > 5
+-  { MT_ADV_CALLBACK, 5, "Empty %d", menu_recall_acb },
++  { MT_ADV_CALLBACK, 5, "LIBRE %d", menu_recall_acb },
+ #endif
+ #if SAVEAREA_MAX > 6
+-  { MT_ADV_CALLBACK, 6, "Empty %d", menu_recall_acb },
++  { MT_ADV_CALLBACK, 6, "LIBRE %d", menu_recall_acb },
+ #endif
+ #ifdef __SD_FILE_BROWSER__
+-  { MT_CALLBACK, FMT_CAL_FILE, "LOAD FROM\n SD CARD", menu_sdcard_browse_cb },
++  { MT_CALLBACK, FMT_CAL_FILE, "CARGAR DE\n TARJETA SD", menu_sdcard_browse_cb },
+ #endif
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+@@ -1829,114 +1839,114 @@ const menuitem_t menu_power[] = {
+ };
+ 
+ const menuitem_t menu_cal[] = {
+-  { MT_SUBMENU,      0, "CALIBRATE",     menu_calop },
+-  { MT_ADV_CALLBACK, 0, "POWER  AUTO",   menu_power_sel_acb },
+-  { MT_SUBMENU,      0, "SAVE",          menu_save },
+-  { MT_ADV_CALLBACK, 0, "RANGE",         menu_cal_range_acb },
+-  { MT_CALLBACK,     0, "RESET",         menu_cal_reset_cb },
+-  { MT_ADV_CALLBACK, 0, "APPLY",         menu_cal_apply_acb },
++  { MT_SUBMENU,      0, "CALIBRAR",     menu_calop },
++  { MT_ADV_CALLBACK, 0, "POT. AUTO",   menu_power_sel_acb },
++  { MT_SUBMENU,      0, "GUARDAR",          menu_save },
++  { MT_ADV_CALLBACK, 0, "RANGO",         menu_cal_range_acb },
++  { MT_CALLBACK,     0, "RESTABLECER",         menu_cal_reset_cb },
++  { MT_ADV_CALLBACK, 0, "APLICAR",         menu_cal_apply_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_trace[] = {
+-  { MT_ADV_CALLBACK, 0, "TRACE %d", menu_trace_acb },
+-  { MT_ADV_CALLBACK, 1, "TRACE %d", menu_trace_acb },
+-  { MT_ADV_CALLBACK, 2, "TRACE %d", menu_trace_acb },
+-  { MT_ADV_CALLBACK, 3, "TRACE %d", menu_trace_acb },
++  { MT_ADV_CALLBACK, 0, "TRAZA %d", menu_trace_acb },
++  { MT_ADV_CALLBACK, 1, "TRAZA %d", menu_trace_acb },
++  { MT_ADV_CALLBACK, 2, "TRAZA %d", menu_trace_acb },
++  { MT_ADV_CALLBACK, 3, "TRAZA %d", menu_trace_acb },
+ #if STORED_TRACES == 1
+-  { MT_ADV_CALLBACK, 0, "%s TRACE", menu_stored_trace_acb},
++  { MT_ADV_CALLBACK, 0, "%s TRAZA", menu_stored_trace_acb},
+ #elif STORED_TRACES > 1
+-  { MT_ADV_CALLBACK, 0, "%s TRACE A", menu_stored_trace_acb},
+-  { MT_ADV_CALLBACK, 1, "%s TRACE B", menu_stored_trace_acb},
++  { MT_ADV_CALLBACK, 0, "%s TRAZA A", menu_stored_trace_acb},
++  { MT_ADV_CALLBACK, 1, "%s TRAZA B", menu_stored_trace_acb},
+ #if STORED_TRACES > 2
+-  { MT_ADV_CALLBACK, 2, "%s TRACE C", menu_stored_trace_acb},
++  { MT_ADV_CALLBACK, 2, "%s TRAZA C", menu_stored_trace_acb},
+ #endif
+ #endif
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_format4[] = {
+-  { MT_ADV_CALLBACK, F_S21|TRC_Rser,   "SERIES R",   menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S21|TRC_Xser,   "SERIES X",   menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S21|TRC_Zser,   "SERIES |Z|", menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S21|TRC_Rsh,    "SHUNT R",    menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S21|TRC_Xsh,    "SHUNT X",    menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S21|TRC_Zsh,    "SHUNT |Z|",  menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S21|TRC_Qs21,   "Q FACTOR",   menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_Rser,   "SERIE R",   menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_Xser,   "SERIE X",   menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_Zser,   "SERIE |Z|", menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_Rsh,    "PARALELO R",    menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_Xsh,    "PARALELO X",    menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_Zsh,    "PARALELO |Z|",  menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_Qs21,   "FACTOR Q",   menu_format_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_formatS21[] = {
+-  { MT_ADV_CALLBACK, F_S21|TRC_LOGMAG, "LOGMAG",      menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S21|TRC_PHASE,  "PHASE",       menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S21|TRC_DELAY,  "DELAY",       menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_LOGMAG, "MAG. LOG",      menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_PHASE,  "FASE",       menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_DELAY,  "RETARDO",       menu_format_acb },
+   { MT_ADV_CALLBACK, F_S21|TRC_SMITH,  "SMITH",       menu_format_acb },
+   { MT_ADV_CALLBACK, F_S21|TRC_POLAR,  "POLAR",       menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S21|TRC_LINEAR, "LINEAR",      menu_format_acb },
++  { MT_ADV_CALLBACK, F_S21|TRC_LINEAR, "LINEAL",      menu_format_acb },
+   { MT_ADV_CALLBACK, F_S21|TRC_REAL,   "REAL",        menu_format_acb },
+   { MT_ADV_CALLBACK, F_S21|TRC_IMAG,   "IMAG",        menu_format_acb },
+-  { MT_SUBMENU,          0, S_RARROW " MORE",     menu_format4 },
++  { MT_SUBMENU,          0, S_RARROW " MAS",     menu_format4 },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_format3[] = {
+-  { MT_ADV_CALLBACK, F_S11|TRC_ZPHASE, "Z PHASE",    menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_sC,     "SERIES C",   menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_sL,     "SERIES L",   menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_Rp,     "PARALLEL R", menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_Xp,     "PARALLEL X", menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_pC,     "PARALLEL C", menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_pL,     "PARALLEL L", menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_ZPHASE, "FASE Z",    menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_sC,     "SERIE C",   menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_sL,     "SERIE L",   menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_Rp,     "PARALELO R", menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_Xp,     "PARALELO X", menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_pC,     "PARALELO C", menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_pL,     "PARALELO L", menu_format_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_format2[] = {
+   { MT_ADV_CALLBACK, F_S11|TRC_POLAR,  "POLAR",       menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_LINEAR, "LINEAR",      menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_LINEAR, "LINEAL",      menu_format_acb },
+   { MT_ADV_CALLBACK, F_S11|TRC_REAL,   "REAL",        menu_format_acb },
+   { MT_ADV_CALLBACK, F_S11|TRC_IMAG,   "IMAG",        menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_Q,      "Q FACTOR",    menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_G,      "CONDUCTANCE", menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_B,      "SUSCEPTANCE", menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_Q,      "FACTOR Q",    menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_G,      "CONDUCTANCIA", menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_B,      "SUSCEPTANCIA", menu_format_acb },
+   { MT_ADV_CALLBACK, F_S11|TRC_Y,      "|Y|",         menu_format_acb },
+-  { MT_SUBMENU,         0, S_RARROW " MORE",     menu_format3 },
++  { MT_SUBMENU,         0, S_RARROW " MAS",     menu_format3 },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_formatS11[] = {
+-  { MT_ADV_CALLBACK, F_S11|TRC_LOGMAG, "LOGMAG",       menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_PHASE,  "PHASE",        menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_DELAY,  "DELAY",        menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_LOGMAG, "MAG. LOG",       menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_PHASE,  "FASE",        menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_DELAY,  "RETARDO",        menu_format_acb },
+   { MT_ADV_CALLBACK, F_S11|TRC_SMITH,  "SMITH",        menu_format_acb },
+   { MT_ADV_CALLBACK, F_S11|TRC_SWR,    "SWR",          menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_R,      "RESISTANCE",   menu_format_acb },
+-  { MT_ADV_CALLBACK, F_S11|TRC_X,      "REACTANCE",    menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_R,      "RESISTENCIA",   menu_format_acb },
++  { MT_ADV_CALLBACK, F_S11|TRC_X,      "REACTANCIA",    menu_format_acb },
+   { MT_ADV_CALLBACK, F_S11|TRC_Z,      "|Z|",          menu_format_acb },
+-  { MT_SUBMENU,          0, S_RARROW " MORE",     menu_format2 },
++  { MT_SUBMENU,          0, S_RARROW " MAS",     menu_format2 },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_scale[] = {
+-  { MT_ADV_CALLBACK, KM_TOP,       "TOP",                 menu_scale_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_BOTTOM,    "BOTTOM",              menu_scale_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_SCALE,     "SCALE/DIV",           menu_scale_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_REFPOS,    "REFERENCE\nPOSITION", menu_scale_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_EDELAY, "E-DELAY\n " R_LINK_COLOR "%b.7F" S_SECOND, menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_S21OFFSET, "S21 OFFSET\n " R_LINK_COLOR "%b.3F" S_dB, menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_TOP,       "SUPERIOR",                 menu_scale_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_BOTTOM,    "INFERIOR",              menu_scale_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_SCALE,     "ESCALA/DIV",           menu_scale_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_REFPOS,    "POSICION\nREFERENCIA", menu_scale_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_EDELAY, "RETARDO E.\n " R_LINK_COLOR "%b.7F" S_SECOND, menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_S21OFFSET, "COMP. S21\n " R_LINK_COLOR "%b.3F" S_dB, menu_keyboard_acb },
+ #ifdef __USE_GRID_VALUES__
+-  { MT_ADV_CALLBACK, VNA_MODE_SHOW_GRID, "SHOW GRID\nVALUES", menu_vna_mode_acb },
+-  { MT_ADV_CALLBACK, VNA_MODE_DOT_GRID , "DOT GRID",          menu_vna_mode_acb },
++  { MT_ADV_CALLBACK, VNA_MODE_SHOW_GRID, "VALORES\nREJILLA", menu_vna_mode_acb },
++  { MT_ADV_CALLBACK, VNA_MODE_DOT_GRID , "REJILLA PTS",          menu_vna_mode_acb },
+ #endif
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_transform[] = {
+-  { MT_ADV_CALLBACK, 0,                       "TRANSFORM\n%s",      menu_transform_acb },
+-  { MT_ADV_CALLBACK, TD_FUNC_LOWPASS_IMPULSE, "LOW PASS\nIMPULSE",  menu_transform_filter_acb },
+-  { MT_ADV_CALLBACK, TD_FUNC_LOWPASS_STEP,    "LOW PASS\nSTEP",     menu_transform_filter_acb },
+-  { MT_ADV_CALLBACK, TD_FUNC_BANDPASS,        "BANDPASS",           menu_transform_filter_acb },
+-  { MT_ADV_CALLBACK, 0,                       "WINDOW\n " R_LINK_COLOR "%s", menu_transform_window_acb },
+-  { MT_ADV_CALLBACK, KM_VELOCITY_FACTOR,      "VELOCITY F.\n " R_LINK_COLOR "%d%%%%", menu_keyboard_acb },
++  { MT_ADV_CALLBACK, 0,                       "TRANSFORMAR\n%s",      menu_transform_acb },
++  { MT_ADV_CALLBACK, TD_FUNC_LOWPASS_IMPULSE, "PASO BAJO\nIMPULSO",  menu_transform_filter_acb },
++  { MT_ADV_CALLBACK, TD_FUNC_LOWPASS_STEP,    "PASO BAJO\nESCALON",     menu_transform_filter_acb },
++  { MT_ADV_CALLBACK, TD_FUNC_BANDPASS,        "PASO BANDA",           menu_transform_filter_acb },
++  { MT_ADV_CALLBACK, 0,                       "VENTANA\n " R_LINK_COLOR "%s", menu_transform_window_acb },
++  { MT_ADV_CALLBACK, KM_VELOCITY_FACTOR,      "FACTOR VEL.\n " R_LINK_COLOR "%d%%%%", menu_keyboard_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+@@ -1970,8 +1980,8 @@ const menuitem_t menu_bandwidth[] = {
+ 
+ #ifdef __USE_SMOOTH__
+ const menuitem_t menu_smooth_count[] = {
+-  { MT_ADV_CALLBACK, VNA_MODE_SMOOTH, "SMOOTH\n " R_LINK_COLOR "%s avg",menu_vna_mode_acb },
+-  { MT_ADV_CALLBACK, 0, "SMOOTH\nOFF",menu_smooth_acb },
++  { MT_ADV_CALLBACK, VNA_MODE_SMOOTH, "SUAVIZAR\n " R_LINK_COLOR "%s prom",menu_vna_mode_acb },
++  { MT_ADV_CALLBACK, 0, "SUAVIZAR\nNO",menu_smooth_acb },
+   { MT_ADV_CALLBACK, 1, "x%d", menu_smooth_acb },
+   { MT_ADV_CALLBACK, 2, "x%d", menu_smooth_acb },
+   { MT_ADV_CALLBACK, 4, "x%d", menu_smooth_acb },
+@@ -1982,85 +1992,85 @@ const menuitem_t menu_smooth_count[] = {
+ #endif
+ 
+ const menuitem_t menu_display[] = {
+-  { MT_SUBMENU,      0, "TRACE",                               menu_trace },
+-  { MT_SUBMENU,      0, "FORMAT\n S11 (REFL)",                 menu_formatS11 },
+-  { MT_SUBMENU,      0, "FORMAT\n S21 (THRU)",                 menu_formatS21 },
+-  { MT_ADV_CALLBACK, 0, "CHANNEL\n " R_LINK_COLOR "%s",        menu_channel_acb },
+-  { MT_SUBMENU,      0, "SCALE",                               menu_scale },
+-  { MT_SUBMENU,      0, "TRANSFORM",                           menu_transform },
+-  { MT_ADV_CALLBACK, 0, "IF BANDWIDTH\n " R_LINK_COLOR "%u" S_Hz, menu_bandwidth_sel_acb },
++  { MT_SUBMENU,      0, "TRAZA",                               menu_trace },
++  { MT_SUBMENU,      0, "FORMATO\n S11 (REFL)",                 menu_formatS11 },
++  { MT_SUBMENU,      0, "FORMATO\n S21 (PASO)",                 menu_formatS21 },
++  { MT_ADV_CALLBACK, 0, "CANAL\n " R_LINK_COLOR "%s",        menu_channel_acb },
++  { MT_SUBMENU,      0, "ESCALA",                               menu_scale },
++  { MT_SUBMENU,      0, "TRANSFORMAR",                           menu_transform },
++  { MT_ADV_CALLBACK, 0, "BANDA FI\n " R_LINK_COLOR "%u" S_Hz, menu_bandwidth_sel_acb },
+ #ifdef __USE_SMOOTH__
+-  { MT_SUBMENU,      0, "DATA SMOOTH",                         menu_smooth_count },
++  { MT_SUBMENU,      0, "SUAVIZADO",                         menu_smooth_count },
+ #endif
+ #ifdef __VNA_Z_RENORMALIZATION__
+-  { MT_ADV_CALLBACK, KM_Z_PORT, "PORT-Z\n " R_LINK_COLOR "50 " S_RARROW "%bF" S_OHM, menu_keyboard_acb},
++  { MT_ADV_CALLBACK, KM_Z_PORT, "Z-PUERTO\n " R_LINK_COLOR "50 " S_RARROW "%bF" S_OHM, menu_keyboard_acb},
+ #endif
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_sweep_points[] = {
+-  { MT_ADV_CALLBACK, KM_POINTS, "SET POINTS\n " R_LINK_COLOR "%d", (const void *)menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, 0, "%d point", menu_points_acb },
++  { MT_ADV_CALLBACK, KM_POINTS, "FIJAR PUNTOS\n " R_LINK_COLOR "%d", (const void *)menu_keyboard_acb },
++  { MT_ADV_CALLBACK, 0, "%d puntos", menu_points_acb },
+ #if POINTS_SET_COUNT > 1
+-  { MT_ADV_CALLBACK, 1, "%d point", menu_points_acb },
++  { MT_ADV_CALLBACK, 1, "%d puntos", menu_points_acb },
+ #endif
+ #if POINTS_SET_COUNT > 2
+-  { MT_ADV_CALLBACK, 2, "%d point", menu_points_acb },
++  { MT_ADV_CALLBACK, 2, "%d puntos", menu_points_acb },
+ #endif
+ #if POINTS_SET_COUNT > 3
+-  { MT_ADV_CALLBACK, 3, "%d point", menu_points_acb },
++  { MT_ADV_CALLBACK, 3, "%d puntos", menu_points_acb },
+ #endif
+ #if POINTS_SET_COUNT > 4
+-  { MT_ADV_CALLBACK, 4, "%d point", menu_points_acb },
++  { MT_ADV_CALLBACK, 4, "%d puntos", menu_points_acb },
+ #endif
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_stimulus[] = {
+-  { MT_ADV_CALLBACK, KM_START,  "START",         menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_STOP,   "STOP",          menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_CENTER, "CENTER",        menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_SPAN,   "SPAN",          menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_CW,     "CW FREQ",       menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_STEP,   "FREQ STEP\n " R_LINK_COLOR "%bF" S_Hz, menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_VAR,    "JOG STEP\n " R_LINK_COLOR "AUTO",      menu_keyboard_acb },
+-  { MT_ADV_CALLBACK,      0,    "SWEEP POINTS\n " R_LINK_COLOR "%u",  menu_points_sel_acb },
++  { MT_ADV_CALLBACK, KM_START,  "INICIO",         menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_STOP,   "FIN",          menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_CENTER, "CENTRO",        menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_SPAN,   "ANCHO",          menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_CW,     "FREC. CW",       menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_STEP,   "PASO FREC.\n " R_LINK_COLOR "%bF" S_Hz, menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_VAR,    "PASO AJUSTE\n " R_LINK_COLOR "AUTO",      menu_keyboard_acb },
++  { MT_ADV_CALLBACK,      0,    "PUNTOS BARR.\n " R_LINK_COLOR "%u",  menu_points_sel_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_marker_sel[] = {
+-  { MT_ADV_CALLBACK, 0, "MARKER %d", menu_marker_sel_acb },
++  { MT_ADV_CALLBACK, 0, "MARCADOR %d", menu_marker_sel_acb },
+ #if MARKERS_MAX >=2
+-  { MT_ADV_CALLBACK, 1, "MARKER %d", menu_marker_sel_acb },
++  { MT_ADV_CALLBACK, 1, "MARCADOR %d", menu_marker_sel_acb },
+ #endif
+ #if MARKERS_MAX >=3
+-  { MT_ADV_CALLBACK, 2, "MARKER %d", menu_marker_sel_acb },
++  { MT_ADV_CALLBACK, 2, "MARCADOR %d", menu_marker_sel_acb },
+ #endif
+ #if MARKERS_MAX >=4
+-  { MT_ADV_CALLBACK, 3, "MARKER %d", menu_marker_sel_acb },
++  { MT_ADV_CALLBACK, 3, "MARCADOR %d", menu_marker_sel_acb },
+ #endif
+ #if MARKERS_MAX >=5
+-  { MT_ADV_CALLBACK, 4, "MARKER %d", menu_marker_sel_acb },
++  { MT_ADV_CALLBACK, 4, "MARCADOR %d", menu_marker_sel_acb },
+ #endif
+ #if MARKERS_MAX >=6
+-  { MT_ADV_CALLBACK, 5, "MARKER %d", menu_marker_sel_acb },
++  { MT_ADV_CALLBACK, 5, "MARCADOR %d", menu_marker_sel_acb },
+ #endif
+ #if MARKERS_MAX >=7
+-  { MT_ADV_CALLBACK, 6, "MARKER %d", menu_marker_sel_acb },
++  { MT_ADV_CALLBACK, 6, "MARCADOR %d", menu_marker_sel_acb },
+ #endif
+ #if MARKERS_MAX >=8
+-  { MT_ADV_CALLBACK, 7, "MARKER %d", menu_marker_sel_acb },
++  { MT_ADV_CALLBACK, 7, "MARCADOR %d", menu_marker_sel_acb },
+ #endif
+-  { MT_CALLBACK, 0,     "ALL OFF", menu_marker_disable_all_cb },
++  { MT_CALLBACK, 0,     "APAGAR TODO", menu_marker_disable_all_cb },
+   { MT_ADV_CALLBACK, 0,   "DELTA", menu_marker_delta_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_marker_ops[] = {
+-  { MT_CALLBACK, ST_START,         S_RARROW" START",   menu_marker_op_cb },
+-  { MT_CALLBACK, ST_STOP,          S_RARROW" STOP",    menu_marker_op_cb },
+-  { MT_CALLBACK, ST_CENTER,        S_RARROW" CENTER",  menu_marker_op_cb },
+-  { MT_CALLBACK, ST_SPAN,          S_RARROW" SPAN",    menu_marker_op_cb },
++  { MT_CALLBACK, ST_START,         S_RARROW" INICIO",   menu_marker_op_cb },
++  { MT_CALLBACK, ST_STOP,          S_RARROW" FIN",    menu_marker_op_cb },
++  { MT_CALLBACK, ST_CENTER,        S_RARROW" CENTRO",  menu_marker_op_cb },
++  { MT_CALLBACK, ST_SPAN,          S_RARROW" ANCHO",    menu_marker_op_cb },
+   { MT_CALLBACK, UI_MARKER_EDELAY, S_RARROW" E-DELAY", menu_marker_op_cb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+@@ -2093,56 +2103,56 @@ const menuitem_t menu_marker_s11smith[] = {
+ // Select menu depend from measure mode
+ #ifdef __USE_LC_MATCHING__
+ const menuitem_t menu_measure_lc[] = {
+-  { MT_ADV_CALLBACK, MEASURE_NONE,        "OFF",                menu_measure_acb },
+-  { MT_ADV_CALLBACK, MEASURE_LC_MATH,     "L/C MATCH",          menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_NONE,        "DESACT.",                menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_LC_MATH,     "AJUSTE L/C",          menu_measure_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ #endif
+ 
+ #ifdef __S11_CABLE_MEASURE__
+ const menuitem_t menu_measure_cable[] = {
+-  { MT_ADV_CALLBACK, MEASURE_NONE,        "OFF",                menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_NONE,        "DESACT.",                menu_measure_acb },
+   { MT_ADV_CALLBACK, MEASURE_S11_CABLE,   "CABLE\n (S11)",      menu_measure_acb },
+-  { MT_ADV_CALLBACK, KM_VELOCITY_FACTOR,  "VELOCITY F.\n " R_LINK_COLOR "%d%%%%", menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_ACTUAL_CABLE_LEN, "CABLE LENGTH",       menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_VELOCITY_FACTOR,  "FACTOR VEL.\n " R_LINK_COLOR "%d%%%%", menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_ACTUAL_CABLE_LEN, "LONG. CABLE",       menu_keyboard_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ #endif
+ 
+ #ifdef __S11_RESONANCE_MEASURE__
+ const menuitem_t menu_measure_resonance[] = {
+-  { MT_ADV_CALLBACK, MEASURE_NONE,        "OFF",                menu_measure_acb },
+-  { MT_ADV_CALLBACK, MEASURE_S11_RESONANCE,"RESONANCE\n (S11)", menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_NONE,        "DESACT.",                menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_S11_RESONANCE,"RESONANCIA\n (S11)", menu_measure_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ #endif
+ 
+ #ifdef __S21_MEASURE__
+ const menuitem_t menu_measure_s21[] = {
+-  { MT_ADV_CALLBACK, MEASURE_NONE,        "OFF",                menu_measure_acb },
+-  { MT_ADV_CALLBACK, MEASURE_SHUNT_LC,    "SHUNT LC\n (S21)",   menu_measure_acb },
+-  { MT_ADV_CALLBACK, MEASURE_SERIES_LC,   "SERIES LC\n (S21)",  menu_measure_acb },
+-  { MT_ADV_CALLBACK, MEASURE_SERIES_XTAL, "SERIES\nXTAL (S21)", menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_NONE,        "DESACT.",                menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_SHUNT_LC,    "LC PARALELO\n (S21)",   menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_SERIES_LC,   "LC SERIE\n (S21)",  menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_SERIES_XTAL, "CRISTAL\nSERIE (S21)", menu_measure_acb },
+   { MT_ADV_CALLBACK, KM_MEASURE_R,        " Rl = " R_LINK_COLOR "%b.4F" S_OHM, menu_keyboard_acb},
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ #endif
+ 
+ const menuitem_t menu_measure[] = {
+-  { MT_ADV_CALLBACK, MEASURE_NONE,        "OFF",                menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_NONE,        "DESACT.",                menu_measure_acb },
+ #ifdef __USE_LC_MATCHING__
+-  { MT_ADV_CALLBACK, MEASURE_LC_MATH,     "L/C MATCH",          menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_LC_MATH,     "AJUSTE L/C",          menu_measure_acb },
+ #endif
+ #ifdef __S11_CABLE_MEASURE__
+   { MT_ADV_CALLBACK, MEASURE_S11_CABLE,   "CABLE\n (S11)",      menu_measure_acb },
+ #endif
+ #ifdef __S11_RESONANCE_MEASURE__
+-  { MT_ADV_CALLBACK, MEASURE_S11_RESONANCE,"RESONANCE\n (S11)", menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_S11_RESONANCE,"RESONANCIA\n (S11)", menu_measure_acb },
+ #endif
+ #ifdef __S21_MEASURE__
+-  { MT_ADV_CALLBACK, MEASURE_SHUNT_LC,    "SHUNT LC\n (S21)",   menu_measure_acb },
+-  { MT_ADV_CALLBACK, MEASURE_SERIES_LC,   "SERIES LC\n (S21)",  menu_measure_acb },
+-  { MT_ADV_CALLBACK, MEASURE_SERIES_XTAL, "SERIES\nXTAL (S21)", menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_SHUNT_LC,    "LC PARALELO\n (S21)",   menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_SERIES_LC,   "LC SERIE\n (S21)",  menu_measure_acb },
++  { MT_ADV_CALLBACK, MEASURE_SERIES_XTAL, "CRISTAL\nSERIE (S21)", menu_measure_acb },
+ #endif
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+@@ -2168,18 +2178,18 @@ const menuitem_t *menu_measure_list[] = {
+ #endif
+ 
+ const menuitem_t menu_marker[] = {
+-  { MT_SUBMENU,                0,   "SELECT\nMARKER",              menu_marker_sel    },
+-  { MT_ADV_CALLBACK,VNA_MODE_SEARCH,"SEARCH\n " R_LINK_COLOR "%s", menu_vna_mode_acb },
+-  { MT_CALLBACK, MK_SEARCH_LEFT,    "SEARCH\n " S_LARROW "LEFT",   menu_marker_search_dir_cb },
+-  { MT_CALLBACK, MK_SEARCH_RIGHT,   "SEARCH\n " S_RARROW "RIGHT",  menu_marker_search_dir_cb },
+-  { MT_SUBMENU,                0,   "OPERATIONS",                  menu_marker_ops    },
+-  { MT_ADV_CALLBACK,           0,   "TRACKING",                    menu_marker_tracking_acb },
++  { MT_SUBMENU,                0,   "ELEGIR\nMARCADOR",              menu_marker_sel    },
++  { MT_ADV_CALLBACK,VNA_MODE_SEARCH,"BUSCAR\n " R_LINK_COLOR "%s", menu_vna_mode_acb },
++  { MT_CALLBACK, MK_SEARCH_LEFT,    "BUSCAR\n " S_LARROW "IZQ",   menu_marker_search_dir_cb },
++  { MT_CALLBACK, MK_SEARCH_RIGHT,   "BUSCAR\n " S_RARROW "DCHA",  menu_marker_search_dir_cb },
++  { MT_SUBMENU,                0,   "OPERACIONES",                  menu_marker_ops    },
++  { MT_ADV_CALLBACK,           0,   "SEGUIMIENTO",                    menu_marker_tracking_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ #ifdef __DFU_SOFTWARE_MODE__
+ const menuitem_t menu_dfu[] = {
+-  { MT_CALLBACK, 0, "RESET AND\nENTER DFU", menu_dfu_cb },
++  { MT_CALLBACK, 0, "REINICIAR\nY MODO DFU", menu_dfu_cb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ #endif
+@@ -2200,14 +2210,14 @@ const menuitem_t menu_serial_speed[] = {
+ };
+ 
+ const menuitem_t menu_connection[] = {
+-  { MT_ADV_CALLBACK, VNA_MODE_CONNECTION, "CONNECTION\n " R_LINK_COLOR "%s", menu_vna_mode_acb },
+-  { MT_ADV_CALLBACK, 0, "SERIAL SPEED\n " R_LINK_COLOR "%u", menu_serial_speed_sel_acb },
++  { MT_ADV_CALLBACK, VNA_MODE_CONNECTION, "CONEXION\n " R_LINK_COLOR "%s", menu_vna_mode_acb },
++  { MT_ADV_CALLBACK, 0, "VEL. SERIE\n " R_LINK_COLOR "%u", menu_serial_speed_sel_acb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ #endif
+ 
+ const menuitem_t menu_clear[] = {
+-  { MT_CALLBACK, MENU_CONFIG_RESET, "CLEAR ALL\nAND RESET", menu_config_cb },
++  { MT_CALLBACK, MENU_CONFIG_RESET, "BORRAR TODO\nY REINICIAR", menu_config_cb },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+@@ -2226,56 +2236,56 @@ const menuitem_t menu_offset[] = {
+ #endif
+ 
+ const menuitem_t menu_device1[] = {
+-  { MT_ADV_CALLBACK, 0,                  "MODE\n " R_LINK_COLOR "%s",      menu_band_sel_acb },
++  { MT_ADV_CALLBACK, 0,                  "MODO\n " R_LINK_COLOR "%s",      menu_band_sel_acb },
+ #ifdef __DIGIT_SEPARATOR__
+-  { MT_ADV_CALLBACK, VNA_MODE_SEPARATOR, "SEPARATOR\n " R_LINK_COLOR "%s", menu_vna_mode_acb },
++  { MT_ADV_CALLBACK, VNA_MODE_SEPARATOR, "SEPARADOR\n " R_LINK_COLOR "%s", menu_vna_mode_acb },
+ #endif
+ #ifdef __SD_CARD_DUMP_FIRMWARE__
+-  { MT_CALLBACK, FMT_BIN_FILE,           "DUMP\nFIRMWARE",                 menu_sdcard_cb },
++  { MT_CALLBACK, FMT_BIN_FILE,           "EXTRAER\nFIRMWARE",                 menu_sdcard_cb },
+ #endif
+ #ifdef __SD_CARD_LOAD__
+ #ifdef __SD_FILE_BROWSER__
+-  { MT_CALLBACK, FMT_CMD_FILE,           "LOAD COMMAND\n SCRIPT",          menu_sdcard_browse_cb },
++  { MT_CALLBACK, FMT_CMD_FILE,           "CARGAR ORDEN\n SCRIPT",          menu_sdcard_browse_cb },
+ #else
+-  { MT_CALLBACK, MENU_CONFIG_LOAD,       "LOAD\nCONFIG.INI",               menu_config_cb },
++  { MT_CALLBACK, MENU_CONFIG_LOAD,       "CARGAR\nCONFIG.INI",               menu_config_cb },
+ #endif
+ #endif
+-  { MT_SUBMENU, 0,                       "CLEAR CONFIG",                   menu_clear },
++  { MT_SUBMENU, 0,                       "BORRAR CFG.",                   menu_clear },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_device[] = {
+-  { MT_ADV_CALLBACK, KM_THRESHOLD, "THRESHOLD\n " R_LINK_COLOR "%.6q",         menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_THRESHOLD, "UMBRAL\n " R_LINK_COLOR "%.6q",         menu_keyboard_acb },
+   { MT_ADV_CALLBACK, KM_XTAL,      "TCXO\n " R_LINK_COLOR "%.6q",              menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_VBAT,      "VBAT OFFSET\n " R_LINK_COLOR "%um" S_VOLT, menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_VBAT,      "AJUSTE VBAT\n " R_LINK_COLOR "%um" S_VOLT, menu_keyboard_acb },
+ #ifdef USE_VARIABLE_OFFSET_MENU
+-  { MT_ADV_CALLBACK, 0,            "IF OFFSET\n " R_LINK_COLOR "%d" S_Hz,      menu_offset_sel_acb },
++  { MT_ADV_CALLBACK, 0,            "OFFSET FI\n " R_LINK_COLOR "%d" S_Hz,      menu_offset_sel_acb },
+ #endif
+ #ifdef __USE_BACKUP__
+-  { MT_ADV_CALLBACK, VNA_MODE_BACKUP,"REMEMBER\nSTATE",                        menu_vna_mode_acb},
++  { MT_ADV_CALLBACK, VNA_MODE_BACKUP,"RECORDAR\nESTADO",                        menu_vna_mode_acb},
+ #endif
+ #ifdef __FLIP_DISPLAY__
+-  { MT_ADV_CALLBACK, VNA_MODE_FLIP_DISPLAY, "FLIP\nDISPLAY",                   menu_vna_mode_acb },
++  { MT_ADV_CALLBACK, VNA_MODE_FLIP_DISPLAY, "GIRAR\nPANTALLA",                   menu_vna_mode_acb },
+ #endif
+ #ifdef __USE_RTC__
+-  { MT_ADV_CALLBACK, KM_RTC_DATE,  "SET DATE",                                 menu_keyboard_acb },
+-  { MT_ADV_CALLBACK, KM_RTC_TIME,  "SET TIME",                                 menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_RTC_DATE,  "FIJAR FECHA",                                 menu_keyboard_acb },
++  { MT_ADV_CALLBACK, KM_RTC_TIME,  "FIJAR HORA",                                 menu_keyboard_acb },
+ #endif
+-  { MT_SUBMENU, 0, S_RARROW" MORE", menu_device1 },
++  { MT_SUBMENU, 0, S_RARROW" MAS", menu_device1 },
+   { MT_NEXT, 0, NULL, menu_back } // next-> menu_back
+ };
+ 
+ const menuitem_t menu_config[] = {
+-  { MT_CALLBACK,  MENU_CONFIG_TOUCH_CAL, "TOUCH CAL",     menu_config_cb },
+-  { MT_CALLBACK, MENU_CONFIG_TOUCH_TEST, "TOUCH TEST",    menu_config_cb },
+-  { MT_SUBMENU,                       0, "EXPERT\nSETTINGS", menu_device },
+-  { MT_CALLBACK,                      0, "SAVE CONFIG",   menu_config_save_cb },
++  { MT_CALLBACK,  MENU_CONFIG_TOUCH_CAL, "CAL. TACTIL",     menu_config_cb },
++  { MT_CALLBACK, MENU_CONFIG_TOUCH_TEST, "PRUEBA TACT.",    menu_config_cb },
++  { MT_SUBMENU,                       0, "OPCIONES\nAVANZADAS", menu_device },
++  { MT_CALLBACK,                      0, "GUARDAR CFG.",   menu_config_save_cb },
+ #ifdef __USE_SERIAL_CONSOLE__
+-  { MT_SUBMENU,                       0, "CONNECTION",    menu_connection },
++  { MT_SUBMENU,                       0, "CONEXION",    menu_connection },
+ #endif
+   { MT_CALLBACK,    MENU_CONFIG_VERSION, "VERSION",       menu_config_cb },
+ #ifdef __LCD_BRIGHTNESS__
+-  { MT_ADV_CALLBACK,                  0, "BRIGHTNESS\n " R_LINK_COLOR "%d%%%%", menu_brightness_acb },
++  { MT_ADV_CALLBACK,                  0, "BRILLO\n " R_LINK_COLOR "%d%%%%", menu_brightness_acb },
+ #endif
+ #ifdef __DFU_SOFTWARE_MODE__
+   { MT_SUBMENU,                       0, S_RARROW "DFU",   menu_dfu },
+@@ -2284,19 +2294,19 @@ const menuitem_t menu_config[] = {
+ };
+ 
+ const menuitem_t menu_top[] = {
+-  { MT_SUBMENU, 0, "DISPLAY",   menu_display },
+-  { MT_SUBMENU, 0, "MARKER",    menu_marker },
+-  { MT_SUBMENU, 0, "STIMULUS",  menu_stimulus },
+-  { MT_SUBMENU, 0, "CALIBRATE", menu_cal },
+-  { MT_SUBMENU, 0, "RECALL",    menu_recall },
++  { MT_SUBMENU, 0, "PANTALLA",   menu_display },
++  { MT_SUBMENU, 0, "MARCADOR",    menu_marker },
++  { MT_SUBMENU, 0, "FRECUENCIA",  menu_stimulus },
++  { MT_SUBMENU, 0, "CALIBRAR", menu_cal },
++  { MT_SUBMENU, 0, "RECUPERAR",    menu_recall },
+ #ifdef __VNA_MEASURE_MODULE__
+-  { MT_CALLBACK,0, "MEASURE",   menu_measure_cb },
++  { MT_CALLBACK,0, "MEDICION",   menu_measure_cb },
+ #endif
+ #ifdef __USE_SD_CARD__
+-  { MT_SUBMENU, 0, "SD CARD",   menu_sdcard },
++  { MT_SUBMENU, 0, "TARJETA SD",   menu_sdcard },
+ #endif
+-  { MT_SUBMENU, 0, "CONFIG",    menu_config },
+-  { MT_ADV_CALLBACK, 0, "%s\nSWEEP", menu_pause_acb },
++  { MT_SUBMENU, 0, "AJUSTES",    menu_config },
++  { MT_ADV_CALLBACK, 0, "%s\nBARRIDO", menu_pause_acb },
+   { MT_NEXT, 0, NULL, NULL } // sentinel
+ };
+ 
+@@ -2806,40 +2816,40 @@ UI_KEYBOARD_CALLBACK(input_filename) {
+ 
+ const keypads_list keypads_mode_tbl[KM_NONE] = {
+ //                      key format     data for cb    text at bottom        callback function
+-[KM_START]           = {KEYPAD_FREQ,   ST_START,      "START",              input_freq     }, // start
+-[KM_STOP]            = {KEYPAD_FREQ,   ST_STOP,       "STOP",               input_freq     }, // stop
+-[KM_CENTER]          = {KEYPAD_FREQ,   ST_CENTER,     "CENTER",             input_freq     }, // center
+-[KM_SPAN]            = {KEYPAD_FREQ,   ST_SPAN,       "SPAN",               input_freq     }, // span
+-[KM_CW]              = {KEYPAD_FREQ,   ST_CW,         "CW FREQ",            input_freq     }, // cw freq
+-[KM_STEP]            = {KEYPAD_FREQ,   ST_STEP,       "FREQ STEP",          input_freq     }, // freq as point step
+-[KM_VAR]             = {KEYPAD_FREQ,   ST_VAR,        "JOG STEP",           input_freq     }, // VAR freq step
+-[KM_POINTS]          = {KEYPAD_UFLOAT, 0,             "POINTS",             input_points   }, // Points num
+-[KM_TOP]             = {KEYPAD_MFLOAT, 0,             "TOP",                input_amplitude}, // top graph value
+-[KM_nTOP]            = {KEYPAD_NFLOAT, 0,             "TOP",                input_amplitude}, // top graph value
+-[KM_BOTTOM]          = {KEYPAD_MFLOAT, 1,             "BOTTOM",             input_amplitude}, // bottom graph value
+-[KM_nBOTTOM]         = {KEYPAD_NFLOAT, 1,             "BOTTOM",             input_amplitude}, // bottom graph value
+-[KM_SCALE]           = {KEYPAD_UFLOAT, KM_SCALE,      "SCALE",              input_scale    }, // scale
+-[KM_nSCALE]          = {KEYPAD_NFLOAT, KM_nSCALE,     "SCALE",              input_scale    }, // nano / pico scale value
+-[KM_REFPOS]          = {KEYPAD_FLOAT,  0,             "REFPOS",             input_ref      }, // refpos
+-[KM_EDELAY]          = {KEYPAD_NFLOAT, 0,             "E-DELAY",            input_edelay   }, // electrical delay
+-[KM_VAR_DELAY]       = {KEYPAD_NFLOAT, 0,             "JOG STEP",           input_var_delay}, // VAR electrical delay
+-[KM_S21OFFSET]       = {KEYPAD_FLOAT,  0,             "S21 OFFSET",         input_s21_offset},// S21 level offset
+-[KM_VELOCITY_FACTOR] = {KEYPAD_PERCENT,0,             "VELOCITY%%",         input_velocity }, // velocity factor
++[KM_START]           = {KEYPAD_FREQ,   ST_START,      "INICIO",              input_freq     }, // start
++[KM_STOP]            = {KEYPAD_FREQ,   ST_STOP,       "FIN",               input_freq     }, // stop
++[KM_CENTER]          = {KEYPAD_FREQ,   ST_CENTER,     "CENTRO",             input_freq     }, // center
++[KM_SPAN]            = {KEYPAD_FREQ,   ST_SPAN,       "ANCHO",               input_freq     }, // span
++[KM_CW]              = {KEYPAD_FREQ,   ST_CW,         "FREC. CW",            input_freq     }, // cw freq
++[KM_STEP]            = {KEYPAD_FREQ,   ST_STEP,       "PASO FREC.",          input_freq     }, // freq as point step
++[KM_VAR]             = {KEYPAD_FREQ,   ST_VAR,        "PASO AJUSTE",           input_freq     }, // VAR freq step
++[KM_POINTS]          = {KEYPAD_UFLOAT, 0,             "PUNTOS",             input_points   }, // Points num
++[KM_TOP]             = {KEYPAD_MFLOAT, 0,             "SUPERIOR",                input_amplitude}, // top graph value
++[KM_nTOP]            = {KEYPAD_NFLOAT, 0,             "SUPERIOR",                input_amplitude}, // top graph value
++[KM_BOTTOM]          = {KEYPAD_MFLOAT, 1,             "INFERIOR",             input_amplitude}, // bottom graph value
++[KM_nBOTTOM]         = {KEYPAD_NFLOAT, 1,             "INFERIOR",             input_amplitude}, // bottom graph value
++[KM_SCALE]           = {KEYPAD_UFLOAT, KM_SCALE,      "ESCALA",              input_scale    }, // scale
++[KM_nSCALE]          = {KEYPAD_NFLOAT, KM_nSCALE,     "ESCALA",              input_scale    }, // nano / pico scale value
++[KM_REFPOS]          = {KEYPAD_FLOAT,  0,             "POS. REF.",             input_ref      }, // refpos
++[KM_EDELAY]          = {KEYPAD_NFLOAT, 0,             "RETARDO E.",            input_edelay   }, // electrical delay
++[KM_VAR_DELAY]       = {KEYPAD_NFLOAT, 0,             "PASO AJUSTE",           input_var_delay}, // VAR electrical delay
++[KM_S21OFFSET]       = {KEYPAD_FLOAT,  0,             "COMP. S21",         input_s21_offset},// S21 level offset
++[KM_VELOCITY_FACTOR] = {KEYPAD_PERCENT,0,             "FACTOR V.%%",         input_velocity }, // velocity factor
+ #ifdef __S11_CABLE_MEASURE__
+-[KM_ACTUAL_CABLE_LEN]= {KEYPAD_MKUFLOAT,0,            "CABLE LENGTH",       input_cable_len}, // real cable length input for VF calculation
++[KM_ACTUAL_CABLE_LEN]= {KEYPAD_MKUFLOAT,0,            "LONG. CABLE",       input_cable_len}, // real cable length input for VF calculation
+ #endif
+ [KM_XTAL]            = {KEYPAD_FREQ,   0,             "TCXO 26M" S_Hz,      input_xtal     }, // XTAL frequency
+-[KM_THRESHOLD]       = {KEYPAD_FREQ,   0,             "THRESHOLD",          input_harmonic }, // Harmonic threshold frequency
+-[KM_VBAT]            = {KEYPAD_UFLOAT, 0,             "BAT OFFSET",         input_vbat     }, // Vbat offset input in mV
++[KM_THRESHOLD]       = {KEYPAD_FREQ,   0,             "UMBRAL",          input_harmonic }, // Harmonic threshold frequency
++[KM_VBAT]            = {KEYPAD_UFLOAT, 0,             "AJUSTE BAT.",         input_vbat     }, // Vbat offset input in mV
+ #ifdef __S21_MEASURE__
+-[KM_MEASURE_R]       = {KEYPAD_UFLOAT, 0,             "MEASURE Rl",         input_measure_r}, // CH0 port impedance in Om
++[KM_MEASURE_R]       = {KEYPAD_UFLOAT, 0,             "MEDIR Rl",         input_measure_r}, // CH0 port impedance in Om
+ #endif
+ #ifdef __VNA_Z_RENORMALIZATION__
+-[KM_Z_PORT]          = {KEYPAD_UFLOAT, 0,             "PORT Z 50" S_RARROW, input_portz    }, // Port Z renormalization impedance
++[KM_Z_PORT]          = {KEYPAD_UFLOAT, 0,             "Z PUERTO 50" S_RARROW, input_portz    }, // Port Z renormalization impedance
+ #endif
+ #ifdef __USE_RTC__
+-[KM_RTC_DATE]        = {KEYPAD_UFLOAT, KM_RTC_DATE,   "SET DATE\nYY MM DD", input_date_time}, // Date
+-[KM_RTC_TIME]        = {KEYPAD_UFLOAT, KM_RTC_TIME,   "SET TIME\nHH MM SS", input_date_time}, // Time
++[KM_RTC_DATE]        = {KEYPAD_UFLOAT, KM_RTC_DATE,   "FIJAR FECHA\nAA MM DD", input_date_time}, // Date
++[KM_RTC_TIME]        = {KEYPAD_UFLOAT, KM_RTC_TIME,   "FIJAR HORA\nHH MM SS", input_date_time}, // Time
+ #endif
+ #ifdef __USE_SD_CARD__
+ [KM_S1P_NAME]        = {KEYPAD_TEXT,   FMT_S1P_FILE,  "S1P",                input_filename }, // s1p filename

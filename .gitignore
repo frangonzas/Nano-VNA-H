@@ -1,0 +1,13 @@
+# Archivos de compilacion locales
+/build/
+/.dep/
+*.o
+*.d
+*.su
+*.log
+
+# Entornos y editores
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
